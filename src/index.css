@@ -1,0 +1,115 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
+All colors MUST be HSL.
+*/
+
+@layer base {
+  :root {
+    /* Cybersecurity dark theme */
+    --background: 220 20% 8%;
+    --foreground: 180 100% 90%;
+
+    --card: 220 18% 12%;
+    --card-foreground: 180 100% 90%;
+
+    --popover: 220 20% 10%;
+    --popover-foreground: 180 100% 90%;
+
+    /* Cyan accent for cybersecurity tech feel */
+    --primary: 180 100% 45%;
+    --primary-foreground: 220 20% 8%;
+
+    --secondary: 220 15% 20%;
+    --secondary-foreground: 180 80% 85%;
+
+    --muted: 220 15% 18%;
+    --muted-foreground: 180 20% 60%;
+
+    --accent: 180 100% 35%;
+    --accent-foreground: 220 20% 8%;
+
+    /* Risk colors */
+    --risk-safe: 140 70% 50%;
+    --risk-low: 140 60% 45%;
+    --risk-medium: 45 100% 55%;
+    --risk-high: 15 90% 55%;
+    --risk-critical: 0 85% 50%;
+
+    --destructive: 0 85% 50%;
+    --destructive-foreground: 180 100% 90%;
+
+    --border: 220 15% 22%;
+    --input: 220 15% 16%;
+    --ring: 180 100% 45%;
+
+    --radius: 0.5rem;
+
+    /* Terminal glow effect */
+    --glow-primary: 180 100% 45%;
+    --glow-safe: 140 70% 50%;
+    --glow-danger: 0 85% 50%;
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    /* Already dark by default */
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Terminal/monospace for technical data */
+  .font-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  }
+
+  /* Glow effects for cybersecurity aesthetic */
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(var(--glow-primary) / 0.3);
+  }
+
+  .glow-safe {
+    box-shadow: 0 0 20px hsl(var(--glow-safe) / 0.3);
+  }
+
+  .glow-danger {
+    box-shadow: 0 0 20px hsl(var(--glow-danger) / 0.3);
+  }
+
+  /* Smooth transitions */
+  .transition-smooth {
+    transition: var(--transition-smooth);
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: hsl(var(--background));
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--primary) / 0.3);
+    border-radius: 4px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--primary) / 0.5);
+  }
+}

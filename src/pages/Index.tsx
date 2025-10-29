@@ -76,7 +76,8 @@ const Index = () => {
             abuse_key: keys?.abuseipdb || '',
             shodan_key: keys?.shodan || '',
             hibp_key: keys?.hibp || '',
-            gemini_key: keys?.gemini || '',
+            supabase_url: keys?.supabase_url || '',
+            supabase_anon_key: keys?.supabase_anon_key || '',
           },
         }),
       });
@@ -88,12 +89,15 @@ const Index = () => {
       const data = await response.json();
       setResult(data);
       
-      // Save to history
+      // Save to history with full data
       saveToHistory({
         indicator: data.indicator,
         indicatorType: data.indicatorType,
         contextScore: data.contextScore,
         summary: data.summary,
+        recommendation: data.recommendation,
+        scoreDetails: data.scoreDetails || [],
+        rawData: data.rawData,
       });
       
       toast.success('Enrichment complete');

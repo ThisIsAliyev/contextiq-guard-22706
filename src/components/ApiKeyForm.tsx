@@ -16,7 +16,8 @@ export const ApiKeyForm = () => {
       abuseipdb: '',
       shodan: '',
       hibp: '',
-      gemini: '',
+      supabase_url: '',
+      supabase_anon_key: '',
     };
   });
 
@@ -26,7 +27,8 @@ export const ApiKeyForm = () => {
     abuseipdb: false,
     shodan: false,
     hibp: false,
-    gemini: false,
+    supabase_url: false,
+    supabase_anon_key: false,
   });
 
   const [testStatus, setTestStatus] = useState<Record<keyof ApiKeys, 'idle' | 'testing' | 'valid' | 'invalid'>>({
@@ -35,7 +37,8 @@ export const ApiKeyForm = () => {
     abuseipdb: 'idle',
     shodan: 'idle',
     hibp: 'idle',
-    gemini: 'idle',
+    supabase_url: 'idle',
+    supabase_anon_key: 'idle',
   });
 
   useEffect(() => {
@@ -61,7 +64,8 @@ export const ApiKeyForm = () => {
       abuseipdb: 'abuseipdb',
       shodan: 'shodan',
       hibp: 'hibp',
-      gemini: 'gemini',
+      supabase_url: 'supabase_url',
+      supabase_anon_key: 'supabase_anon_key',
     };
 
     const apiKey = keys[service];
@@ -136,10 +140,16 @@ export const ApiKeyForm = () => {
       link: 'https://haveibeenpwned.com/API/Key',
     },
     {
-      key: 'gemini',
-      label: 'Google Gemini API Key',
-      description: 'For AI-powered summaries',
-      link: 'https://makersuite.google.com/app/apikey',
+      key: 'supabase_url',
+      label: 'Supabase Project URL',
+      description: 'Your Supabase project URL (e.g., https://[project-id].supabase.co)',
+      link: 'https://supabase.com/dashboard',
+    },
+    {
+      key: 'supabase_anon_key',
+      label: 'Supabase Anon Key',
+      description: 'Your Supabase anonymous/public key for AI summarization',
+      link: 'https://supabase.com/dashboard',
     },
   ];
 

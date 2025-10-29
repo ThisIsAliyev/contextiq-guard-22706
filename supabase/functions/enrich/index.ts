@@ -12,7 +12,8 @@ interface ApiKeys {
   abuse_key: string;
   shodan_key: string;
   hibp_key: string;
-  gemini_key: string;
+  supabase_url: string;
+  supabase_anon_key: string;
 }
 
 interface EnrichRequest {
@@ -72,22 +73,45 @@ serve(async (req) => {
       if (hibpData.status === 'fulfilled') rawData.hibp = hibpData.value;
     }
     
-    // Calculate dynamic score
-    const contextScore = calculateScore(indicator_type, rawData);
+    // Calculate dynamic score with new algorithm
+    const { score: contextScore, details: scoreDetails } = calculateScore(indicator_type, rawData);
     
-    // Generate AI summary
-    const { summary, recommendation } = await generateAISummary(
-      indicator_type,
-      indicator_value,
-      rawData,
-      contextScore,
-      api_keys.gemini_key
-    );
+    // Generate AI summary via Supabase
+    let summary = 'AI summary unavailable';
+    let recommendation = 'Review manually';
+    
+    try {
+      const aiResponse = await fetch(`${api_keys.supabase_url}/functions/v1/contextiq-summarizer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${api_keys.supabase_anon_key}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          indicator_value,
+          indicator_type,
+          context_score: contextScore,
+          raw_data: rawData,
+          score_details: scoreDetails,
+        }),
+      });
+      
+      if (aiResponse.ok) {
+        const aiData = await aiResponse.json();
+        summary = aiData.summary || summary;
+        recommendation = aiData.recommendation || recommendation;
+      } else {
+        console.error('Supabase AI call failed:', await aiResponse.text());
+      }
+    } catch (aiError) {
+      console.error('AI summary error:', aiError);
+    }
     
     const response = {
       indicator: indicator_value,
       indicatorType: indicator_type,
       contextScore,
+      scoreDetails,
       summary,
       recommendation,
       rawData,
@@ -113,10 +137,19 @@ async function fetchWhois(indicator: string, apiKey: string) {
   const response = await fetch(url);
   const data = await response.json();
   
+  // Calculate domain age
+  let ageDays = null;
+  if (data.WhoisRecord?.createdDate) {
+    const created = new Date(data.WhoisRecord.createdDate);
+    const now = new Date();
+    ageDays = Math.floor((now.getTime() - created.getTime()) / (1000 * 60 * 60 * 24));
+  }
+  
   return {
     createdDate: data.WhoisRecord?.createdDate || 'Unknown',
     registrarName: data.WhoisRecord?.registrarName || 'Unknown',
     asn: data.WhoisRecord?.registryData?.nameServers?.[0] || 'Unknown',
+    ageDays,
   };
 }
 
@@ -160,9 +193,11 @@ async function fetchShodan(ip: string, apiKey: string) {
   const response = await fetch(`https://api.shodan.io/shodan/host/${ip}?key=${apiKey}`);
   const data = await response.json();
   
+  const vulns = data.vulns ? Object.keys(data.vulns) : [];
+  
   return {
     ports: data.ports || [],
-    vulns: data.vulns ? Object.keys(data.vulns).length > 0 : false,
+    vulns: vulns,
     org: data.org || 'Unknown',
   };
 }
@@ -183,90 +218,137 @@ async function fetchHIBP(email: string, apiKey: string) {
   };
 }
 
-function calculateScore(type: string, rawData: any): number {
+function calculateScore(type: string, rawData: any): { score: number; details: string[] } {
+  let score = 0;
+  const details: string[] = [];
+  
   if (type === 'ip') {
+    // 1. VirusTotal
     const vtMalicious = rawData.virustotal?.malicious || 0;
     const vtSuspicious = rawData.virustotal?.suspicious || 0;
+    
+    if (vtMalicious >= 6) {
+      score += 60;
+      details.push(`VirusTotal: High detection rate (${vtMalicious} vendors flagged as malicious)`);
+    } else if (vtMalicious >= 2) {
+      score += 30;
+      details.push(`VirusTotal: Medium detection rate (${vtMalicious} vendors flagged as malicious)`);
+    } else if (vtMalicious === 1) {
+      score += 15;
+      details.push(`VirusTotal: Low detection rate (1 vendor flagged as malicious)`);
+    }
+    
+    if (vtSuspicious > 0 && vtMalicious === 0) {
+      score += 5;
+      details.push(`VirusTotal: ${vtSuspicious} vendors flagged as suspicious`);
+    }
+    
+    // 2. AbuseIPDB
     const abuseScore = rawData.abuseipdb?.abuseConfidenceScore || 0;
-    const hasVulns = rawData.shodan?.vulns || false;
-    const openPorts = rawData.shodan?.ports?.length || 0;
     
-    const scoreVT = (vtMalicious > 0 ? 0.8 : 0) + (vtSuspicious > 0 ? 0.2 : 0);
-    const scoreAbuse = abuseScore / 100.0;
-    const scoreShodan = (hasVulns ? 0.8 : 0) + (Math.min(openPorts, 10) / 10 * 0.2);
+    if (abuseScore >= 76) {
+      score += 25;
+      details.push(`AbuseIPDB: High confidence of abuse (${abuseScore}%)`);
+    } else if (abuseScore >= 50) {
+      score += 10;
+      details.push(`AbuseIPDB: Medium confidence of abuse (${abuseScore}%)`);
+    } else if (abuseScore > 0) {
+      details.push(`AbuseIPDB: Low abuse score (${abuseScore}%)`);
+    }
     
-    return Math.round((scoreVT * 40) + (scoreAbuse * 35) + (scoreShodan * 25));
+    // 3. Shodan
+    const vulnCount = rawData.shodan?.vulns?.length || 0;
+    const portCount = rawData.shodan?.ports?.length || 0;
+    
+    if (vulnCount >= 3) {
+      score += 25;
+      details.push(`Shodan: ${vulnCount} known vulnerabilities detected`);
+    } else if (vulnCount >= 1) {
+      score += 10;
+      details.push(`Shodan: ${vulnCount} known vulnerabilit${vulnCount === 1 ? 'y' : 'ies'} detected`);
+    }
+    
+    if (portCount > 10) {
+      score += 5;
+      details.push(`Shodan: High number of open ports (${portCount})`);
+    } else if (portCount > 0) {
+      details.push(`Shodan: ${portCount} open ports detected`);
+    }
     
   } else if (type === 'domain') {
+    // Domain scoring
     const vtMalicious = rawData.virustotal?.malicious || 0;
     const vtSuspicious = rawData.virustotal?.suspicious || 0;
     
-    const scoreVT = (vtMalicious > 0 ? 0.8 : 0) + (vtSuspicious > 0 ? 0.2 : 0);
-    return Math.round(scoreVT * 100);
+    if (vtMalicious >= 6) {
+      score += 80;
+      details.push(`VirusTotal: High detection rate (${vtMalicious} vendors)`);
+    } else if (vtMalicious >= 2) {
+      score += 40;
+      details.push(`VirusTotal: Medium detection rate (${vtMalicious} vendors)`);
+    } else if (vtMalicious === 1) {
+      score += 20;
+      details.push(`VirusTotal: Low detection rate (1 vendor)`);
+    }
+    
+    if (vtSuspicious > 0 && vtMalicious === 0) {
+      score += 10;
+      details.push(`VirusTotal: ${vtSuspicious} vendors flagged as suspicious`);
+    }
+    
+    // WHOIS age check
+    const ageDays = rawData.whoisxml?.ageDays;
+    if (ageDays !== null && ageDays < 90) {
+      score += 20;
+      details.push(`WHOIS: Newly registered domain (${ageDays} days old)`);
+    } else if (ageDays !== null) {
+      details.push(`WHOIS: Domain age: ${ageDays} days`);
+    }
     
   } else if (type === 'hash') {
+    // Hash scoring
     const vtMalicious = rawData.virustotal?.malicious || 0;
     const vtSuspicious = rawData.virustotal?.suspicious || 0;
     
-    const scoreVT = (vtMalicious > 0 ? 0.9 : 0) + (vtSuspicious > 0 ? 0.1 : 0);
-    return Math.round(scoreVT * 100);
+    if (vtMalicious >= 10) {
+      score += 90;
+      details.push(`VirusTotal: Very high detection rate (${vtMalicious} vendors)`);
+    } else if (vtMalicious >= 5) {
+      score += 70;
+      details.push(`VirusTotal: High detection rate (${vtMalicious} vendors)`);
+    } else if (vtMalicious >= 1) {
+      score += 40;
+      details.push(`VirusTotal: Low detection rate (${vtMalicious} vendors)`);
+    }
+    
+    if (vtSuspicious > 0) {
+      score += 10;
+      details.push(`VirusTotal: ${vtSuspicious} vendors flagged as suspicious`);
+    }
     
   } else if (type === 'email') {
+    // Email scoring
     const breaches = rawData.hibp?.breaches || 0;
-    const score = Math.min(breaches * 15, 100);
-    return Math.round(score);
+    
+    if (breaches >= 5) {
+      score += 70;
+      details.push(`HaveIBeenPwned: Email found in ${breaches} data breaches`);
+    } else if (breaches >= 2) {
+      score += 40;
+      details.push(`HaveIBeenPwned: Email found in ${breaches} data breaches`);
+    } else if (breaches === 1) {
+      score += 20;
+      details.push(`HaveIBeenPwned: Email found in 1 data breach`);
+    }
   }
   
-  return 0;
-}
-
-async function generateAISummary(
-  type: string,
-  indicator: string,
-  rawData: any,
-  score: number,
-  geminiKey: string
-): Promise<{ summary: string; recommendation: string }> {
-  const prompt = `You are a cybersecurity analyst. Analyze this ${type} indicator: ${indicator}
-
-Context Score: ${score}/100
-Raw Data: ${JSON.stringify(rawData, null, 2)}
-
-Provide:
-1. A concise 2-3 sentence summary of the threat level and key findings
-2. A clear, actionable recommendation (one sentence)
-
-Format your response as:
-SUMMARY: [your summary]
-RECOMMENDATION: [your recommendation]`;
-
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${geminiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-        }),
-      }
-    );
-    
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    
-    const summaryMatch = text.match(/SUMMARY:\s*(.+?)(?=RECOMMENDATION:|$)/s);
-    const recommendationMatch = text.match(/RECOMMENDATION:\s*(.+?)$/s);
-    
-    return {
-      summary: summaryMatch?.[1]?.trim() || 'AI summary unavailable',
-      recommendation: recommendationMatch?.[1]?.trim() || 'Review manually',
-    };
-  } catch (error) {
-    console.error('Gemini API error:', error);
-    return {
-      summary: `Score: ${score}/100. Manual review required.`,
-      recommendation: 'Unable to generate AI recommendation. Review data manually.',
-    };
+  // Add a baseline message if no threats found
+  if (details.length === 0) {
+    details.push('No significant threats detected across all sources');
   }
+  
+  return {
+    score: Math.min(score, 100),
+    details,
+  };
 }

@@ -29,14 +29,15 @@ const EnrichmentDetail = () => {
     );
   }
 
-  // Transform history entry to match EnrichmentViewer props
+  // Use full history entry data
   const result = {
     indicator: entry.indicator,
     indicatorType: entry.indicatorType,
     contextScore: entry.contextScore,
     summary: entry.summary,
-    recommendation: 'See full enrichment details below',
-    rawData: {},
+    recommendation: entry.recommendation || 'Review manually',
+    scoreDetails: entry.scoreDetails || [],
+    rawData: entry.rawData || {},
   };
 
   return (

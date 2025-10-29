@@ -6,6 +6,9 @@ export interface EnrichmentHistory {
   contextScore: number;
   timestamp: string;
   summary: string;
+  recommendation: string;
+  scoreDetails: string[];
+  rawData: any;
 }
 
 const HISTORY_KEY = 'contextiq_history';

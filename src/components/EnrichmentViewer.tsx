@@ -1,8 +1,12 @@
+import { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ScoreGauge } from './ScoreGauge';
 import { Badge } from '@/components/ui/badge';
-import { Sparkles, FileCode, BookOpen } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Sparkles, FileCode, BookOpen, Maximize2, Download } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface EnrichmentResult {
   indicator: string;
@@ -10,6 +14,7 @@ interface EnrichmentResult {
   contextScore: number;
   summary: string;
   recommendation: string;
+  scoreDetails?: string[];
   rawData: {
     abuseipdb?: any;
     virustotal?: any;
@@ -24,6 +29,41 @@ interface EnrichmentViewerProps {
 }
 
 export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
+  const [expandedTool, setExpandedTool] = useState<string | null>(null);
+
+  const downloadJSON = (data: any, filename: string) => {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success(`Downloaded ${filename}`);
+  };
+
+  const ExpandedToolView = ({ tool, data }: { tool: string; data: any }) => {
+    if (!data) return <p className="text-muted-foreground">No data available</p>;
+
+    return (
+      <div className="space-y-4">
+        <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs font-mono max-h-96">
+          {JSON.stringify(data, null, 2)}
+        </pre>
+        <Button
+          variant="outline"
+          onClick={() => downloadJSON(data, `${tool}-${result.indicator}.json`)}
+          className="w-full"
+        >
+          <Download className="mr-2 h-4 w-4" />
+          Download {tool} JSON
+        </Button>
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-6 items-start">
@@ -54,6 +94,16 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
               <h4 className="font-semibold mb-2 text-foreground">Recommendation</h4>
               <p className="text-primary font-medium">{result.recommendation}</p>
             </div>
+            {result.scoreDetails && result.scoreDetails.length > 0 && (
+              <div>
+                <h4 className="font-semibold mb-2 text-foreground">Score Rationale</h4>
+                <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                  {result.scoreDetails.map((detail, idx) => (
+                    <li key={idx}>{detail}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -76,7 +126,16 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
             {result.rawData.abuseipdb && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">AbuseIPDB</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">AbuseIPDB</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedTool('abuseipdb')}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -100,7 +159,16 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
             {result.rawData.virustotal && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">VirusTotal</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">VirusTotal</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedTool('virustotal')}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -126,7 +194,16 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
             {result.rawData.shodan && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">Shodan</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">Shodan</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedTool('shodan')}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -136,7 +213,7 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Vulnerabilities:</span>
                     <span className="font-mono text-risk-high">
-                      {result.rawData.shodan.vulns ? 'Yes' : 'No'}
+                      {result.rawData.shodan.vulns?.length || 0}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -150,7 +227,16 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
             {result.rawData.whoisxml && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="text-base">WHOIS</CardTitle>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">WHOIS</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedTool('whoisxml')}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">
                   <div className="flex justify-between">
@@ -161,6 +247,54 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
                     <span className="text-muted-foreground">Registrar:</span>
                     <span className="font-mono text-xs">{result.rawData.whoisxml.registrarName || 'N/A'}</span>
                   </div>
+                  {result.rawData.whoisxml.ageDays !== null && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Domain Age:</span>
+                      <span className="font-mono text-xs">{result.rawData.whoisxml.ageDays} days</span>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {result.rawData.hibp && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-base">Have I Been Pwned</CardTitle>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setExpandedTool('hibp')}
+                    >
+                      <Maximize2 className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Data Breaches:</span>
+                    <span className="font-mono text-risk-critical font-semibold">
+                      {result.rawData.hibp.breaches || 0}
+                    </span>
+                  </div>
+                  {result.rawData.hibp.breachNames && result.rawData.hibp.breachNames.length > 0 && (
+                    <div className="pt-2">
+                      <span className="text-muted-foreground text-xs">Breach Sites:</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {result.rawData.hibp.breachNames.slice(0, 3).map((name: string, idx: number) => (
+                          <Badge key={idx} variant="destructive" className="text-xs">
+                            {name}
+                          </Badge>
+                        ))}
+                        {result.rawData.hibp.breachNames.length > 3 && (
+                          <Badge variant="outline" className="text-xs">
+                            +{result.rawData.hibp.breachNames.length - 3} more
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -170,11 +304,22 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
         <TabsContent value="raw">
           <Card>
             <CardHeader>
-              <CardTitle>Raw JSON Response</CardTitle>
-              <CardDescription>Complete enrichment data from all sources</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Raw JSON Response</CardTitle>
+                  <CardDescription>Complete enrichment data from all sources</CardDescription>
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => downloadJSON(result, `enrichment-${result.indicator}.json`)}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download Full Report
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs font-mono">
+              <pre className="bg-muted p-4 rounded-lg overflow-x-auto text-xs font-mono max-h-96">
                 {JSON.stringify(result, null, 2)}
               </pre>
             </CardContent>
@@ -196,6 +341,26 @@ export const EnrichmentViewer = ({ result }: EnrichmentViewerProps) => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Expanded Tool Dialog */}
+      <Dialog open={expandedTool !== null} onOpenChange={() => setExpandedTool(null)}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {expandedTool && expandedTool.charAt(0).toUpperCase() + expandedTool.slice(1)} - Detailed View
+            </DialogTitle>
+            <DialogDescription>
+              Complete raw data from {expandedTool}
+            </DialogDescription>
+          </DialogHeader>
+          {expandedTool && (
+            <ExpandedToolView
+              tool={expandedTool}
+              data={result.rawData[expandedTool as keyof typeof result.rawData]}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

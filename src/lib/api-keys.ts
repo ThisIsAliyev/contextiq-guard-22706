@@ -5,7 +5,8 @@ export interface ApiKeys {
   abuseipdb: string;
   shodan: string;
   hibp: string;
-  gemini: string;
+  supabase_url: string;
+  supabase_anon_key: string;
 }
 
 const STORAGE_KEY = 'contextiq_api_keys';
@@ -48,6 +49,7 @@ export const hasApiKeys = (): boolean => {
     keys.abuseipdb &&
     keys.shodan &&
     keys.hibp &&
-    keys.gemini
+    keys.supabase_url &&
+    keys.supabase_anon_key
   );
 };
